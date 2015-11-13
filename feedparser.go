@@ -169,7 +169,9 @@ func NewFeed(r io.Reader) (*Feed, error) {
 			case levelFeed:
 				switch {
 				case tag == feedTitle:
-					feed.Title = text
+					if feed.Title == "" {
+						feed.Title = text
+					}
 				case (!atom && tag == rssDescription) || (atom && tag == atomSubtitle):
 					feed.Subtitle = text
 				case !atom && tag == rssLink:
