@@ -19,6 +19,7 @@ Documentation is at [http://go.pkgdoc.org/github.com/iand/feedparser](http://go.
 ## Contributors
 
 * [Hugo Tavares Reis](http://github.com/htr) - <http://htr.github.io>
+* [Alessandro Arzilli](http://github.com/aarzilli)
 
 
 ## Contributing
