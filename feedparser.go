@@ -31,7 +31,9 @@ type FeedItem struct {
 	Id          string
 	Title       string
 	Description string
+	Content     string
 	Link        string
+	Author      string
 	Image       string
 	ImageSource string
 	When        time.Time
@@ -41,9 +43,11 @@ type FeedItem struct {
 
 const feedTitle = "title"
 const (
-	atomNs  = "http://www.w3.org/2005/atom"
-	mediaNs = "http://search.yahoo.com/mrss/"
-	ytNs    = "http://gdata.youtube.com/schemas/2007"
+	atomNs     = "http://www.w3.org/2005/atom"
+	mediaNs    = "http://search.yahoo.com/mrss/"
+	ytNs       = "http://gdata.youtube.com/schemas/2007"
+	contentNs  = "http://purl.org/rss/1.0/modules/content/"
+	elementsNS = "http://purl.org/dc/elements/1.1/"
 )
 
 const (
@@ -52,6 +56,7 @@ const (
 	rssLink        = "link"
 	rssPubDate     = "pubdate"
 	rssDescription = "description"
+	rssContent     = "encoded"
 	rssId          = "guid"
 )
 
@@ -63,6 +68,7 @@ const (
 	atomLinkHref = "href"
 	atomUpdated  = "updated"
 	atomSummary  = "summary"
+	atomContent  = "content"
 	atomId       = "id"
 )
 
@@ -250,6 +256,10 @@ func NewFeed(r io.Reader) (*Feed, error) {
 						}
 						item.Link = text
 					}
+				case !atom && tag == "creator" && ns == elementsNS:
+					item.Author = text
+				case (!atom && tag == rssContent && ns == contentNs) || (atom && tag == atomContent):
+					item.Content = text
 				case atom && tag == atomUpdated:
 					var f string
 					switch {
