@@ -7,12 +7,12 @@
 package feedparser
 
 import (
+	"code.google.com/p/go-charset/charset"
+	_ "code.google.com/p/go-charset/data"
 	"encoding/xml"
 	"io"
 	"strings"
 	"time"
-	"code.google.com/p/go-charset/charset"
-	_ "code.google.com/p/go-charset/data"
 )
 
 type Feed struct {
@@ -20,6 +20,11 @@ type Feed struct {
 	Subtitle string
 	Link     string
 	Items    []*FeedItem
+}
+
+type Media struct {
+	Url  string
+	Size string
 }
 
 type FeedItem struct {
@@ -30,6 +35,8 @@ type FeedItem struct {
 	Image       string
 	ImageSource string
 	When        time.Time
+	Enclosure   string
+	Media       []Media
 }
 
 const feedTitle = "title"
@@ -89,9 +96,12 @@ func NewFeed(r io.Reader) (*Feed, error) {
 	var level int
 	feed := &Feed{}
 	item := &FeedItem{}
+	item.Media = []Media{}
 	parser := xml.NewDecoder(r)
 	parser.Strict = false
 	parser.CharsetReader = charset.NewReader
+	linkOk := false
+	var st xml.StartElement
 	for {
 		token, err := parser.Token()
 		if err == io.EOF {
@@ -103,6 +113,7 @@ func NewFeed(r io.Reader) (*Feed, error) {
 		case xml.StartElement:
 			ns = strings.ToLower(t.Name.Space)
 			tag = strings.ToLower(t.Name.Local)
+			st = t
 			switch {
 			case tag == atomFeed:
 				atom = true
@@ -112,9 +123,23 @@ func NewFeed(r io.Reader) (*Feed, error) {
 				level = levelFeed
 			case (!atom && tag == rssItem) || (atom && tag == atomEntry):
 				level = levelPost
+				linkOk = false
 				item = &FeedItem{When: time.Now()}
+				item.Media = []Media{}
+
+			case tag == "enclosure":
+				for _, a := range t.Attr {
+					if strings.ToLower(a.Name.Local) == "url" {
+						item.Enclosure = a.Value
+						item.Media = append(item.Media, Media{Url: a.Value})
+						break
+					}
+				}
 
 			case atom && tag == atomLink:
+				if (level == levelPost) && linkOk {
+					break
+				}
 				for _, a := range t.Attr {
 					if strings.ToLower(a.Name.Local) == atomLinkHref {
 						switch level {
@@ -123,7 +148,37 @@ func NewFeed(r io.Reader) (*Feed, error) {
 						case levelPost:
 							item.Link = a.Value
 						}
+					}
+					if (level == levelPost) && strings.ToLower(a.Name.Local) == "rel" {
+						if a.Value == "alternate" {
+							linkOk = true
+						}
+					}
+				}
+
+			case ns == mediaNs && tag == "content":
+				if level != levelPost {
+					break
+				}
+				ok := false
+				for _, attr := range t.Attr {
+					if (strings.ToLower(attr.Name.Local)) == "type" && strings.HasPrefix(strings.ToLower(attr.Value), "video") {
+						ok = true
 						break
+					}
+				}
+				if ok {
+					for _, attr := range t.Attr {
+						if (strings.ToLower(attr.Name.Local)) == "url" {
+							item.Media = append(item.Media, Media{Url: attr.Value})
+							break
+						}
+					}
+					for _, attr := range t.Attr {
+						if (strings.ToLower(attr.Name.Local)) == "filesize" {
+							item.Media[len(item.Media)-1].Size = attr.Value
+							break
+						}
 					}
 				}
 
@@ -149,7 +204,6 @@ func NewFeed(r io.Reader) (*Feed, error) {
 					item.ImageSource = name
 
 				}
-
 			}
 
 		case xml.EndElement:
@@ -186,7 +240,16 @@ func NewFeed(r io.Reader) (*Feed, error) {
 				case (!atom && tag == rssDescription) || (atom && tag == atomSummary):
 					item.Description = text
 				case !atom && tag == rssLink:
-					item.Link = text
+					if !linkOk {
+						for _, a := range st.Attr {
+							if strings.ToLower(a.Name.Local) == "rel" {
+								if a.Value == "alternate" {
+									linkOk = true
+								}
+							}
+						}
+						item.Link = text
+					}
 				case atom && tag == atomUpdated:
 					var f string
 					switch {
