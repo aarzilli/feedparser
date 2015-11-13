@@ -58,6 +58,8 @@ const (
 	rssDescription = "description"
 	rssContent     = "encoded"
 	rssId          = "guid"
+	rssAuthor      = "author"
+	rssName        = "name"
 )
 
 const (
@@ -107,6 +109,8 @@ func NewFeed(r io.Reader) (*Feed, error) {
 	parser.Strict = false
 	parser.CharsetReader = charset.NewReader
 	linkOk := false
+	globalAuthor := ""
+	nameTag := ""
 	var st xml.StartElement
 	for {
 		token, err := parser.Token()
@@ -214,11 +218,24 @@ func NewFeed(r io.Reader) (*Feed, error) {
 
 		case xml.EndElement:
 			e := strings.ToLower(t.Name.Local)
-			if e == atomEntry || e == rssItem {
+			switch e {
+			case atomEntry, rssItem:
 				if item.Id == "" {
 					item.Id = item.Link
 				}
+				if item.Author == "" {
+					item.Author = globalAuthor
+				}
 				feed.Items = append(feed.Items, item)
+			case rssAuthor:
+				if nameTag != "" {
+					if level == levelFeed {
+						globalAuthor = nameTag
+					} else {
+						item.Author = nameTag
+					}
+				}
+				nameTag = ""
 			}
 		case xml.CharData:
 			text := string([]byte(t))
@@ -232,6 +249,8 @@ func NewFeed(r io.Reader) (*Feed, error) {
 					if feed.Title == "" {
 						feed.Title = text
 					}
+				case tag == rssName:
+					nameTag = text
 				case (!atom && tag == rssDescription) || (atom && tag == atomSubtitle):
 					feed.Subtitle = text
 				case !atom && tag == rssLink:
@@ -245,6 +264,10 @@ func NewFeed(r io.Reader) (*Feed, error) {
 					item.Title = text
 				case (!atom && tag == rssDescription) || (atom && tag == atomSummary):
 					item.Description = text
+				case tag == rssName:
+					nameTag = text
+				case tag == rssAuthor:
+					item.Author = text
 				case !atom && tag == rssLink:
 					if !linkOk {
 						for _, a := range st.Attr {
